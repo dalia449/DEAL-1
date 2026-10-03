@@ -1,0 +1,151 @@
+import React,{useEffect,useRef,useState} from "react";
+import {createRoot} from "react-dom/client";
+import {supabase,hasBackend,signUp,signIn,signOut,getSession} from "./supabase";
+import "./styles.css";
+
+const ADMIN_EMAIL="dd3.99d@gmail.com";
+const modules=[
+["dashboard","نظرة عامة","Overview","⌂"],["site","تحليل الموقع","Site Analysis","⌖"],["space","استغلال المساحة","Space Utilization","▦"],
+["paper","ورق ← رقمي","Paper → Digital","✎"],["plan","المخطط 2D","2D Floor Plan","□"],["hand","تتبع اليد","Hand Tracking","☝"],
+["studio","استوديو 3D","3D Studio","◇"],["ai","مساعد التصميم","AI Assistant","✦"],["furniture","أثاث ← 3D","Furniture → 3D","▧"],
+["materials","المواد والألوان","Materials & Colors","◈"],["lighting","الإضاءة","Lighting","☼"],["sustain","الاستدامة","Sustainability","♧"],
+["client","تعاون العميل","Client Collaboration","◎"],["report","التقرير الاحترافي","Professional Report","▤"]
+];
+
+function Logo(){return <img className="brand-logo" src="/deal-logo.png" alt="DEAL"/>}
+function CameraTool({mode="scan",title="تشغيل الكاميرا",onClose}){
+ const video=useRef(null),[state,setState]=useState("idle"),[err,setErr]=useState("");
+ useEffect(()=>()=>{if(video.current?.srcObject)video.current.srcObject.getTracks().forEach(t=>t.stop())},[]);
+ async function start(){setErr("");setState("loading");try{
+   const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
+   video.current.srcObject=s; await video.current.play(); setState("live");
+ }catch(e){setErr("تعذر الوصول إلى الكاميرا. يمكنك التحقق من صلاحية المتصفح أو استخدام وضع الرفع.");setState("error")}}
+ return <div className="camera-modal"><div className="camera-box"><button className="close" onClick={onClose}>×</button><span className="eyebrow">CAMERA • {mode.toUpperCase()}</span><h2>{title}</h2>
+ {state==="idle"&&<><p>لن نطلب إذن الكاميرا إلا بعد ضغطك على زر التشغيل.</p><button className="primary" onClick={start}>السماح وتشغيل الكاميرا</button></>}
+ {state==="loading"&&<p>جاري تشغيل الكاميرا…</p>}
+ {state==="live"&&<><video ref={video} playsInline muted className="camera-video"/><div className="camera-controls"><button className="secondary" onClick={()=>{setState("idle");video.current.srcObject?.getTracks().forEach(t=>t.stop())}}>إيقاف</button><button className="primary" onClick={()=>alert("تم التقاط الإطار بنجاح.")}>التقاط</button></div></>}
+ {state==="error"&&<><p className="error">{err}</p><button className="secondary" onClick={()=>setState("idle")}>العودة</button></>}
+ </div></div>
+}
+
+function Auth({onDone}){
+ const [mode,setMode]=useState("login"),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState(""),[marketing,setMarketing]=useState(false),[msg,setMsg]=useState("");
+ async function submit(e){e.preventDefault();setMsg("");try{
+   if(mode==="register"){const d=await signUp({email,password,name,marketing}); if(d.demo){localStorage.setItem("deal_demo_user",JSON.stringify({email,name,marketing,verified:true}));onDone({email,name,isAdmin:email.toLowerCase()===ADMIN_EMAIL});}else setMsg("تم إنشاء الحساب. افتح بريدك واضغط رابط التحقق قبل تسجيل الدخول.");}
+   else {const d=await signIn(email,password);onDone({email,name:d.user?.user_metadata?.full_name||"",isAdmin:email.toLowerCase()===ADMIN_EMAIL});}
+ }catch(e){setMsg(e.message||"حدث خطأ");}}
+ return <main className="entry"><section className="entry-visual"><div className="hero"><div className="wall-logo"><Logo/></div><div className="office-person"><div className="person-head"></div><div className="thobe"></div></div><div className="villa-scene"><div className="villa"><i className="roof"></i><div className="glass g1"></div><div className="glass g2"></div><div className="glass g3"></div><div className="wood"></div></div><div className="pool"></div><div className="garden"></div></div><div className="hand"><i></i></div><div className="laptop"><div className="screen"><span>DEAL</span><b>3D</b><b>2D</b><b>AI</b></div></div></div></section>
+ <section className="entry-auth"><div className="auth"><Logo/><span className="eyebrow">DEAL PLATFORM</span><h1>من الفكرة إلى تصميم هندسي ذكي متكامل</h1><p>تحليل الموقع، استغلال المساحة، الرسم، التصميم ثلاثي الأبعاد، التعاون والتقرير في سير عمل هندسي واحد.</p>
+ <div className="tabs"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>تسجيل الدخول</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>إنشاء حساب</button></div>
+ <form onSubmit={submit}>{mode==="register"&&<label>الاسم الكامل<input value={name} onChange={e=>setName(e.target.value)} required/></label>}<label>البريد الإلكتروني<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>كلمة المرور<input type="password" minLength="8" value={password} onChange={e=>setPassword(e.target.value)} required/></label>
+ {mode==="register"&&<label className="check"><input type="checkbox" checked={marketing} onChange={e=>setMarketing(e.target.checked)}/><span>أوافق على استلام الأخبار والعروض والتحديثات عبر البريد الإلكتروني. يمكنني إلغاء الاشتراك لاحقًا.</span></label>}
+ <button className="primary wide">{mode==="login"?"دخول إلى مساحة العمل":"إنشاء الحساب"}</button></form>
+ <div className="or">أو</div><button className="secondary wide" onClick={()=>onDone({email:"guest@deal.local",name:"Guest",isAdmin:false})}>تصفح كزائر</button>{msg&&<div className="notice">{msg}</div>}
+ {!hasBackend&&<div className="demo-warning">وضع العرض المحلي: اربط Supabase قبل التسليم لتفعيل التحقق الحقيقي للبريد.</div>}
+ </div></section></main>
+}
+
+function Layout({user,onLogout}){
+ const [page,setPage]=useState("dashboard"),[camera,setCamera]=useState(null);
+ const [report,setReport]=useState(false),[comments,setComments]=useState([]);
+ const [points,setPoints]=useState([]);
+ const isAdmin=user.isAdmin;
+ const title=modules.find(x=>x[0]===page)?.[1]||"نظرة عامة";
+ function draw(e){const r=e.currentTarget.getBoundingClientRect();setPoints(p=>[...p,{x:e.clientX-r.left,y:e.clientY-r.top}])}
+ return <div className="app"><aside className="sidebar"><Logo/><div className="project"><span>المشروع الحالي</span><b>فيلا الصفا</b><small>v1.3 • محفوظ</small></div><nav>{modules.map(m=><button className={page===m[0]?"active":""} onClick={()=>setPage(m[0])} key={m[0]}><i>{m[3]}</i>{m[1]}</button>)}</nav>{isAdmin&&<button className="admin-link" onClick={()=>setPage("admin")}>⚙ إدارة المنصة</button>}<div className="side-bottom"><button onClick={()=>document.documentElement.dir=document.documentElement.dir==="rtl"?"ltr":"rtl"}>AR / EN</button><button onClick={onLogout}>خروج</button></div></aside>
+ <main className="main"><header className="top"><span>DEAL / {title}</span><div><b>{user.name||user.email}</b><em>{isAdmin?"ADMIN":"ENGINEER"}</em></div></header>
+ <section className="content">
+ {page==="dashboard"&&<Dashboard setPage={setPage}/>}
+ {page==="site"&&<Site setCamera={setCamera}/>}
+ {page==="space"&&<Space/>}
+ {page==="paper"&&<Paper setCamera={setCamera} points={points} setPoints={setPoints}/>}
+ {page==="plan"&&<Plan/>}
+ {page==="hand"&&<Hand setCamera={setCamera}/>}
+ {page==="studio"&&<Studio/>}
+ {page==="ai"&&<AI/>}
+ {page==="furniture"&&<Furniture setCamera={setCamera}/>}
+ {page==="materials"&&<Materials/>}
+ {page==="lighting"&&<Lighting/>}
+ {page==="sustain"&&<Sustain/>}
+ {page==="client"&&<Client comments={comments} setComments={setComments}/>}
+ {page==="report"&&<Report/>}
+ {page==="admin"&&isAdmin&&<Admin/>}
+ </section></main>{camera&&<CameraTool mode={camera} title={camera==="hand"?"تتبع اليد":camera==="land"?"مسح الأرض":camera==="paper"?"مسح الرسم":"التقاط الأثاث"} onClose={()=>setCamera(null)}/></div>
+}
+
+function Header({eyebrow,title,sub,action}){return <div className="page-head"><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{sub}</p></div>{action}</div>}
+function Dashboard({setPage}){
+  const projects=["فيلا الصفا","مركز الأعمال الشمالي","استراحة الوادي"];
+  const locations=["جدة • حي الصفا","الرياض • طريق الملك","الطائف"];
+  const progress=[72,88,31];
+  return (
+    <>
+      <Header eyebrow="WORKSPACE" title="نظرة عامة" sub="من الموقع إلى التقرير النهائي في سير عمل واحد." action={<button className="primary" onClick={()=>setPage("site")}>+ مشروع جديد</button>} />
+      <div className="stats">
+        {[['08','مشاريع نشطة'],['03','قيد المراجعة'],['74%','متوسط التقدم'],['126','نسخة محفوظة']].map((x,i)=>(
+          <div className="stat" key={i}><small>{x[1]}</small><b>{x[0]}</b><span>حالة المشروع</span></div>
+        ))}
+      </div>
+      <div className="cards">
+        {projects.map((x,i)=>(
+          <div className="project-card" key={x}>
+            <div className={"thumb t"+i}><span>DEAL</span></div>
+            <h3>{x}</h3><p>{locations[i]}</p>
+            <div className="bar"><i style={{width:progress[i]+"%"}} /></div>
+          </div>
+        ))}
+      </div>
+      <div className="workflow">
+        {["الموقع","التحليل","المساحة","المخطط","3D","المراجعة","التقرير"].map((x,i)=>(
+          <div className={i<4 ? "done" : ""} key={x}><b>{"0"+(i+1)}</b><span>{x}</span></div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Site({setCamera}){
+  const metrics=[
+    ["مساحة الأرض","612 m²"],["القابل للبناء","428 m²"],["الاتجاه","North / NE"],
+    ["التعرض الشمسي","مرتفع صباحًا"],["الوصول","واجهة رئيسية"],["الحركة","جيدة"]
+  ];
+  return (
+    <>
+      <Header eyebrow="SITE INTELLIGENCE" title="تحليل الموقع" sub="اتجاه الأرض، الشمس، الوصول، المساحة والكتلة المقترحة." action={<button className="primary" onClick={()=>setCamera("land")}>Scan Land</button>} />
+      <div className="two">
+        <div className="map">
+          <div className="boundary">
+            <div className="footprint">BUILDING<br/>278 m²</div>
+            <div className="sun">SUN</div>
+          </div>
+          <b className="north">N</b>
+        </div>
+        <div className="panel">
+          <h3>ملخص هندسي</h3>
+          {metrics.map((x,i)=>(
+            <div className="metric" key={i}><span>{x[0]}</span><b>{x[1]}</b></div>
+          ))}
+          <button className="secondary wide">إنشاء توصيات</button>
+        </div>
+      </div>
+    </>
+  );
+}
+function Space(){return <><Header eyebrow="SPACE UTILIZATION" title="استغلال المساحة" sub="توزيع الكتلة، الحركة، المواقف، الأخضر والمساحات الخارجية."/><div className="two"><div className="space-canvas"><div className="zone building">BUILDING<br/>278 m²</div><div className="zone green">GREEN<br/>122 m²</div><div className="zone parking">PARKING<br/>84 m²</div><div className="zone outdoor">OUTDOOR<br/>56 m²</div></div><div className="panel"><h3>التوزيع</h3>{[["Building footprint","45.4%"],["Green area","19.9%"],["Circulation","13.7%"],["Outdoor","9.1%"]].map(x=><div className="metric"><span>{x[0]}</span><b>{x[1]}</b></div>)}<button className="primary wide">اعتماد التوزيع</button></div></div></>}
+function Paper({setCamera,points,setPoints}){return <><Header eyebrow="PAPER → DIGITAL" title="من الورق إلى الرقمي" sub="التقاط الرسم، تحويله إلى مخطط، ثم مراجعته قبل الاعتماد." action={<button className="primary" onClick={()=>setCamera("paper")}>Scan Paper Drawing</button>}/><div className="two"><div className="draw-card"><div className="paper-grid" onPointerDown={e=>{const r=e.currentTarget.getBoundingClientRect();setPoints([...points,{x:e.clientX-r.left,y:e.clientY-r.top}])}}>{points.map((p,i)=><i key={i} style={{left:p.x,top:p.y}}/> )}</div><div><button className="secondary" onClick={()=>setPoints([])}>مسح الرسم</button><button className="primary" onClick={()=>alert("تم إنشاء معاينة المخطط الرقمي من الرسم.")}>تحويل إلى 2D</button></div></div><div className="panel"><h3>Digital Conversion</h3><div className="floor-mini"><span>LIVING</span><span>KITCHEN</span><span>BED 01</span><span>BATH</span></div><div className="notice">راجع الجدران، الفتحات والأبعاد قبل الاعتماد.</div></div></div></>}
+function Plan(){return <><Header eyebrow="CAD WORKSPACE" title="المخطط ثنائي الأبعاد" sub="جدران، غرف، أبواب، نوافذ وأبعاد."/><div className="cad"><aside>{["⌗","▱","○","T","↔"].map(x=><button>{x}</button>)}</aside><div className="cad-floor"><div className="room r1">LIVING</div><div className="room r2">KITCHEN</div><div className="room r3">MASTER</div><div className="room r4">BED 02</div><div className="room r5">BATH</div><span className="dim">12.20 m</span><span className="dim d2">8.40 m</span></div><aside className="props"><h3>Properties</h3><p>Element: Wall</p><p>Thickness: 0.20 m</p><p>Material: Warm Limestone</p><button className="primary wide">حفظ النسخة</button></aside></div></>}
+function Hand({setCamera}){return <><Header eyebrow="COMPUTER VISION" title="تتبع اليد" sub="تفاعل مباشر باليد. لا يتم طلب الكاميرا إلا بعد اختيارك." action={<button className="primary" onClick={()=>setCamera("hand")}>Start Hand Tracking</button>}/><div className="two"><div className="tracking"><div className="hand-outline">☝</div><div className="landmarks">21 LANDMARKS • READY</div></div><div className="panel"><h3>الإيماءات</h3>{["تحريك / تحديد","إيقاف","تكبير / تصغير","رسم خط"].map(x=><div className="metric"><span>{x}</span><b>READY</b></div>)}<div className="notice">عند عدم توفر التتبع الحقيقي، يظهر وضع Demo بوضوح.</div></div></div></>}
+function Studio(){return <><Header eyebrow="3D STUDIO" title="استوديو 3D" sub="مشهد ثلاثي الأبعاد وخصائص المواد والإضاءة."/><div className="studio"><aside className="tools">{["Select","Move","Rotate","Wall","Door","Furniture"].map(x=><button>{x}</button>)}</aside><div className="viewport"><div className="vhouse"><i></i><b></b><em></em></div><span>Perspective • 01</span></div><aside className="props"><h3>Properties</h3><p>Material: Warm Limestone</p><p>Color: #D9CBBE</p><p>Height: 3.20 m</p><button className="primary wide">Save</button></aside></div></>}
+function AI(){const [choice,setChoice]=useState("");return <><Header eyebrow="AI DESIGN ASSISTANT" title="مساعد التصميم" sub="اقتراحات قابلة للمعاينة والاعتماد أو الرفض."/><div className="two"><div className="ai-card"><div className="ai-head">✦ DEAL Design Assistant <span>READY</span></div><p>أقترح نقل منطقة المعيشة 1.2م نحو الجنوب لتحسين الإضاءة الطبيعية وتقليل التعرض الغربي.</p><div className="proposal"><div></div><span>→</span><div></div></div><div className="actions">{["Preview","Apply","Reject"].map(x=><button className={choice===x?"selected":""} onClick={()=>setChoice(x)}>{x}</button>)}</div></div><div className="panel"><h3>مصادر القرار</h3>{["Site analysis","Space utilization","Sun path","Engineer constraints"].map(x=><div className="metric"><span>{x}</span><b>✓</b></div>)}<div className="notice">AI support is preliminary design assistance, not certified engineering calculation.</div></div></div></>}
+function Furniture({setCamera}){return <><Header eyebrow="FURNITURE → 3D" title="الأثاث إلى 3D" sub="التقاط صورة أو رفعها ثم وضع نموذج تقريبي داخل المشهد." action={<button className="primary" onClick={()=>setCamera("furniture")}>Furniture Capture</button>}/><div className="furniture"><div className="chair"></div><div className="arrow">→<small>Approximation</small></div><div className="chair placed"></div></div></>}
+function Materials(){return <><Header eyebrow="MATERIALS & COLORS" title="المواد والألوان" sub="قيم فعلية للألوان والتشطيبات."/><div className="palette">{[["Warm Limestone","#D9CBBE"],["Deep Brown","#54483C"],["Soft Cream","#EFE6DA"],["Natural Wood","#9A7353"],["Architectural Green","#55705D"]].map(x=><div><i style={{background:x[1]}}></i><b>{x[0]}</b><span>{x[1]}</span></div>)}</div></>}
+function Lighting(){return <><Header eyebrow="LIGHTING" title="الإضاءة" sub="الإضاءة الطبيعية والصناعية."/><div className="two"><div className="light-scene"><div className="light-house"></div></div><div className="panel"><h3>Controls</h3>{["Intensity","Sun direction","Warm / Cool"].map(x=><label className="range">{x}<input type="range" defaultValue="65"/></label>)}<button className="primary wide">Preview</button></div></div></>}
+function Sustain(){return <><Header eyebrow="SUSTAINABILITY" title="الاستدامة" sub="دعم تصميمي أولي للإضاءة والتهوية والتظليل والمياه والمساحات الخضراء."/><div className="sustain">{[["الإضاءة الطبيعية","82%"],["التهوية","74%"],["التظليل","68%"],["المساحات الخضراء","20%"],["الورق","−36%"],["المياه","دعم أولي"]].map(x=><div><small>{x[0]}</small><b>{x[1]}</b></div>)}</div><div className="notice">هذه توصيات أولية لدعم التصميم وليست شهادة أو حسابًا هندسيًا معتمدًا.</div></>}
+function Client({comments,setComments}){const [text,setText]=useState("");return <><Header eyebrow="CLIENT COLLABORATION" title="تعاون العميل" sub="تعليقات، طلبات تغيير، مراجعة واعتماد."/><div className="two"><div className="client-view"><div className="villa-mini"></div><span className="pin">1</span><span className="pin p2">2</span></div><div className="panel"><h3>Comments</h3>{comments.map(c=><div className="comment"><b>{c.name}</b><p>{c.text}</p></div>)}<input className="comment-input" value={text} onChange={e=>setText(e.target.value)} placeholder="اكتب ملاحظة"/><button className="secondary wide" onClick={()=>{if(text.trim()){setComments([...comments,{name:"داليا",text}]);setText("")}}}>إضافة تعليق</button><button className="primary wide">اعتماد النسخة</button></div></div></>}
+function Report(){const [generated,setGenerated]=useState(false);function make(){setGenerated(true);localStorage.setItem("deal_report",new Date().toISOString())}return <><Header eyebrow="PROFESSIONAL REPORT" title="التقرير الاحترافي" sub="تجميع مخرجات المشروع في تقرير قابل للطباعة والمشاركة." action={<button className="primary" onClick={make}>إنشاء التقرير</button>}/><div className="report"><div className="paper-report"><div className="report-head"><Logo/><span>REPORT • v1.3</span></div><h1>Villa Al Safa</h1><p>Architectural Design & Engineering Review</p><div className="report-img"><div></div></div><div className="report-cols"><div><b>Site Analysis</b><p>Orientation, access, solar exposure.</p></div><div><b>Space Utilization</b><p>Building, green, parking and outdoor.</p></div><div><b>Design Decisions</b><p>Materials, lighting, AI review and client approval.</p></div></div><div className="report-foot">DEAL • Design • Engineering • Architecture • Living</div></div><div className="panel"><h3>{generated?"التقرير جاهز":"التقرير غير منشأ"}</h3><p>{generated?"تم تجميع بيانات المشروع. استخدم الطباعة لحفظ PDF.":"اضغط إنشاء التقرير أولًا."}</p>{generated&&<><button className="primary wide" onClick={()=>window.print()}>طباعة / حفظ PDF</button><button className="secondary wide" onClick={()=>{const blob=new Blob([document.querySelector(".paper-report").outerHTML],{type:"text/html"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="DEAL-Professional-Report.html";a.click()}}>تصدير التقرير</button></>}</div></div></>}
+function Admin(){const [saved,setSaved]=useState(false);return <><Header eyebrow="OWNER CONTROL" title="إدارة المنصة" sub="هذه المنطقة تظهر للمالك فقط."/><div className="admin-grid"><div><div className="admin-card"><span>OWNER</span><h3>{ADMIN_EMAIL}</h3><p>الصلاحية لا تعتمد على اختيار المستخدم للدور.</p></div><div className="admin-card"><h3>Brand & Content</h3><p>الشعار والنصوص والصور والأقسام والقوالب.</p><button className="secondary" onClick={()=>setSaved(true)}>حفظ ونشر التعديلات</button>{saved&&<div className="notice">تم حفظ التغيير في حالة العرض المحلية. للنشر لجميع الأجهزة استخدم قاعدة البيانات/Storage في Supabase.</div>}</div></div><div className="admin-card"><h3>Marketing Email</h3><p>الإرسال فقط للمستخدمين الذين وافقوا صراحة على الرسائل التسويقية.</p><label>عنوان الحملة<input className="admin-input" placeholder="عنوان الإعلان"/></label><label>المحتوى<textarea className="admin-input" rows="6" placeholder="محتوى الرسالة"/></label><button className="primary wide" onClick={()=>alert("يلزم إعداد مزود البريد RESEND/SMTP لإرسال البريد فعليًا.")}>إرسال للمشتركين</button><small>يجب ضبط RESEND/SMTP قبل الإرسال الفعلي.</small></div></div></>}
+
+function App(){const [user,setUser]=useState(null);useEffect(()=>{getSession().then(s=>{if(s)setUser({email:s.user.email,name:s.user.user_metadata?.full_name,isAdmin:s.user.email?.toLowerCase()===ADMIN_EMAIL})})},[]);
+ async function logout(){await signOut();setUser(null)} if(!user)return <Auth onDone={setUser}/>;return <Layout user={user} onLogout={logout}/>}
+
+createRoot(document.getElementById("root")).render(<App/>);
